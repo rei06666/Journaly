@@ -4,8 +4,9 @@ import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
-export default function SignInPage() {
+export default function SignUpPage() {
   const router = useRouter()
+  const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -16,44 +17,24 @@ export default function SignInPage() {
     setIsLoading(true)
     setError("")
 
-    console.log('=== サインイン開始 ===')
-    console.log('Email:', email)
-    console.log('Password:', password ? '***' : '(empty)')
-
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001"
-      console.log('API URL:', apiUrl)
-      console.log('リクエスト送信中...')
-      
-      const res = await fetch(`${apiUrl}/users/signin`, {
+      const res = await fetch(`${apiUrl}/users/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, name: name || undefined }),
       })
-
-      console.log('レスポンス受信:', res.status, res.statusText)
 
       if (!res.ok) {
         const data = await res.json()
-        console.log('エラーレスポンス:', data)
-        throw new Error(data.message || "サインインに失敗しました")
+        throw new Error(data.message || "アカウント作成に失敗しました")
       }
 
-      const user = await res.json()
-      console.log("Signed in user:", user)
-      
-      // ユーザーIDをクエリパラメータで渡す
-      if (user.id) {
-        router.push(`/dashboard?userId=${user.id}`)
-      } else {
-        throw new Error("ユーザー情報が取得できませんでした")
-      }
+      router.push("/signin")
     } catch (err) {
-      console.error('=== エラー発生 ===', err)
       setError(err instanceof Error ? err.message : "エラーが発生しました")
     } finally {
       setIsLoading(false)
-      console.log('=== サインイン処理終了 ===')
     }
   }
 
@@ -78,7 +59,7 @@ export default function SignInPage() {
             </svg>
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Journaly</h1>
-          <p className="mt-2 text-gray-600">あなたの毎日を記録しよう</p>
+          <p className="mt-2 text-gray-600">アカウントを作成</p>
         </div>
 
         {error && (
@@ -87,8 +68,25 @@ export default function SignInPage() {
           </div>
         )}
 
-        {/* Sign In Form */}
+        {/* Sign Up Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label
+              htmlFor="name"
+              className="block text-sm font-medium text-gray-700 mb-2"
+            >
+              お名前（任意）
+            </label>
+            <input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
+              placeholder="山田太郎"
+            />
+          </div>
+
           <div>
             <label
               htmlFor="email"
@@ -112,7 +110,7 @@ export default function SignInPage() {
               htmlFor="password"
               className="block text-sm font-medium text-gray-700 mb-2"
             >
-              パスワード
+              パスワード（8文字以上）
             </label>
             <input
               id="password"
@@ -120,6 +118,7 @@ export default function SignInPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              minLength={8}
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
               placeholder="••••••••"
             />
@@ -130,23 +129,17 @@ export default function SignInPage() {
             disabled={isLoading}
             className="w-full py-3 bg-amber-500 text-white font-medium rounded-xl hover:bg-amber-600 disabled:bg-amber-300 disabled:cursor-not-allowed transition-all duration-200"
           >
-            {isLoading ? "サインイン中..." : "サインイン"}
+            {isLoading ? "作成中..." : "アカウントを作成"}
           </button>
         </form>
 
         {/* Links */}
-        <div className="mt-6 text-center space-y-2">
+        <div className="mt-6 text-center">
           <Link
-            href="/signup"
+            href="/signin"
             className="block text-sm text-amber-600 hover:underline"
           >
-            アカウントをお持ちでない方はこちら
-          </Link>
-          <Link
-            href="/forgot-password"
-            className="block text-sm text-gray-500 hover:underline"
-          >
-            パスワードをお忘れの方
+            既にアカウントをお持ちの方はこちら
           </Link>
         </div>
       </div>
