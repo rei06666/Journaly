@@ -1,16 +1,21 @@
 # データベースマイグレーション手順
 
-## GitHub Actionsでの自動実行（推奨）
+## 自動実行（推奨）
 
-`deploy-backend.yml`ワークフローには、デプロイ前に自動的にmigrationを実行するステップが含まれています。
+**アプリケーション起動時に自動実行**
 
-デプロイ時に自動的に以下が実行されます：
-1. ECS Run Taskでmigration専用のタスクを起動
-2. `npx prisma migrate deploy`を実行
-3. migrationの完了を待機
-4. 成功したらECSサービスを更新
+バックエンドコンテナは起動時に自動的に`npx prisma migrate deploy`を実行してからアプリケーションを起動します。
 
-## 手動でmigrationを実行する方法
+デプロイフロー：
+1. GitHub Actionsで新しいDockerイメージをビルド
+2. ECRにプッシュ
+3. ECSサービスを更新
+4. 新しいコンテナ起動時にmigrationが自動実行
+5. migration成功後にアプリケーションが起動
+
+migrationが失敗した場合、コンテナは起動せず、ECSはヘルスチェック失敗としてロールバックします。
+
+## 手動でmigrationを実行する方法（緊急時）
 
 ### 方法1: ECS Execを使う
 
