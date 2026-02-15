@@ -101,24 +101,32 @@ jobs:
         run: |
           echo "Running database migrations..."
           
+          # Create override JSON for migration
+          cat > /tmp/overrides.json << 'EOF'
+          {
+            "containerOverrides": [
+              {
+                "name": "backend",
+                "command": ["npx", "prisma", "migrate", "deploy"]
+              },
+              {
+                "name": "adot-collector",
+                "command": ["sh", "-c", "echo ADOT disabled for migration && sleep 300"]
+              }
+            ]
+          }
+          EOF
+          
+          echo "Override configuration:"
+          cat /tmp/overrides.json
+          
           # Run migration as a one-off task
           TASK_ARN=$(aws ecs run-task \
             --cluster ${{ steps.ecs-info.outputs.cluster_name }} \
             --task-definition ${{ steps.ecs-info.outputs.task_family }} \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[${{ steps.vpc-config.outputs.subnets }}],securityGroups=[${{ steps.vpc-config.outputs.security_groups }}],assignPublicIp=DISABLED}" \
-            --overrides '{
-              "containerOverrides": [
-                {
-                  "name": "backend",
-                  "command": ["dumb-init", "--", "npx", "prisma", "migrate", "deploy"]
-                },
-                {
-                  "name": "adot-collector",
-                  "command": ["sh", "-c", "echo ADOT disabled for migration && sleep 300"]
-                }
-              ]
-            }' \
+            --overrides file:///tmp/overrides.json \
             --region ${{ env.AWS_REGION }} \
             | jq -r '.tasks[0].taskArn')
           
