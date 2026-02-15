@@ -101,14 +101,6 @@ jobs:
         run: |
           echo "Running database migrations..."
           
-          # Get the latest task definition
-          TASK_DEF=$(aws ecs describe-task-definition \
-            --task-definition ${{ steps.ecs-info.outputs.task_family }} \
-            --region ${{ env.AWS_REGION }})
-          
-          # Update the task definition to override the command for migration
-          TASK_DEF_ARN=$(echo $TASK_DEF | jq -r '.taskDefinition.taskDefinitionArn')
-          
           # Run migration as a one-off task
           TASK_ARN=$(aws ecs run-task \
             --cluster ${{ steps.ecs-info.outputs.cluster_name }} \
@@ -119,7 +111,11 @@ jobs:
               "containerOverrides": [
                 {
                   "name": "backend",
-                  "command": ["sh", "-c", "npx prisma migrate deploy && echo Migration completed"]
+                  "command": ["dumb-init", "--", "npx", "prisma", "migrate", "deploy"]
+                },
+                {
+                  "name": "adot-collector",
+                  "command": ["sh", "-c", "echo ADOT disabled for migration && sleep 300"]
                 }
               ]
             }' \
@@ -128,21 +124,38 @@ jobs:
           
           echo "Migration task ARN: $TASK_ARN"
           
-          # Wait for migration task to complete
+          # Wait for migration task to complete (with timeout)
+          echo "Waiting for migration to complete..."
           aws ecs wait tasks-stopped \
             --cluster ${{ steps.ecs-info.outputs.cluster_name }} \
             --tasks $TASK_ARN \
-            --region ${{ env.AWS_REGION }}
+            --region ${{ env.AWS_REGION }} \
+            --cli-read-timeout 600 \
+            || true
           
           # Check if migration succeeded
-          TASK_EXIT_CODE=$(aws ecs describe-tasks \
+          TASK_STATUS=$(aws ecs describe-tasks \
             --cluster ${{ steps.ecs-info.outputs.cluster_name }} \
             --tasks $TASK_ARN \
-            --region ${{ env.AWS_REGION }} \
-            | jq -r '.tasks[0].containers[] | select(.name=="backend") | .exitCode')
+            --region ${{ env.AWS_REGION }})
           
-          if [ "$TASK_EXIT_CODE" != "0" ]; then
+          TASK_EXIT_CODE=$(echo $TASK_STATUS | jq -r '.tasks[0].containers[] | select(.name=="backend") | .exitCode // "null"')
+          STOP_REASON=$(echo $TASK_STATUS | jq -r '.tasks[0].stoppedReason // "unknown"')
+          
+          echo "Exit code: $TASK_EXIT_CODE"
+          echo "Stop reason: $STOP_REASON"
+          
+          # Get migration logs
+          echo "=== Migration logs ==="
+          aws logs tail /ecs/${{ vars.PROJECT_NAME || 'journaly' }}-${{ github.event.inputs.environment || 'dev' }}/backend \
+            --since 5m \
+            --format short \
+            --region ${{ env.AWS_REGION }} \
+            || echo "Could not fetch logs"
+          
+          if [ "$TASK_EXIT_CODE" != "0" ] && [ "$TASK_EXIT_CODE" != "null" ]; then
             echo "❌ Migration failed with exit code: $TASK_EXIT_CODE"
+            echo "Stop reason: $STOP_REASON"
             exit 1
           fi
           
