@@ -42,10 +42,6 @@ test/
 *.spec.ts
 *.test.ts
 
-# Ignore TypeScript config (not needed in Docker)
-tsconfig.json
-tsconfig.build.json
-
 # Ignore ESLint config
 .eslintrc.js
 eslint.config.mjs

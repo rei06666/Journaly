@@ -198,6 +198,28 @@ resource "aws_iam_role_policy" "ecs_task_adot" {
   })
 }
 
+# Policy for ECS Exec (SSM Session Manager)
+resource "aws_iam_role_policy" "ecs_task_exec_policy" {
+  name = "${var.project_name}-${var.environment}-ecs-exec-policy"
+  role = aws_iam_role.ecs_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # Application Signals Policy
 resource "aws_iam_role_policy_attachment" "ecs_task_application_signals" {
   count      = var.enable_application_signals ? 1 : 0
@@ -317,6 +339,9 @@ resource "aws_ecs_service" "backend" {
   task_definition = aws_ecs_task_definition.backend.arn
   desired_count   = var.backend_desired_count
   launch_type     = "FARGATE"
+
+  # Enable ECS Exec for debugging and migrations
+  enable_execute_command = true
 
   network_configuration {
     subnets          = module.vpc.private_subnets
