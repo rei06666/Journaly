@@ -1,0 +1,131 @@
+version: '3'
+
+tasks:
+  db:
+    desc: データベース（PostgreSQL）を起動
+    dir: .
+    cmds:
+      - docker-compose up -d postgres
+
+  backend:
+    desc: バックエンド（NestJS）を起動
+    dir: journaly-backend
+    cmds:
+      - npx nest start --watch
+
+  frontend:
+    desc: フロントエンド（Next.js）を起動
+    dir: journaly-frontend
+    cmds:
+      - npx next dev
+
+  all:
+    desc: データベース、バックエンド、フロントエンドを全て起動
+    deps:
+      - db
+    cmds:
+      - echo "データベースが起動しました。バックエンドとフロントエンドを起動します..."
+      - sleep 3
+      - task: backend-start
+      - task: frontend-start
+
+  backend-start:
+    dir: journaly-backend
+    cmds:
+      - npx nest start --watch &
+
+  frontend-start:
+    dir: journaly-frontend
+    cmds:
+      - npm run dev &
+
+  dev:
+    desc: 開発環境を起動（データベース + バックエンド + フロントエンド）
+    cmds:
+      - docker-compose up -d
+      - echo "データベースが起動しました（3秒待機）..."
+      - sleep 3
+      - cd journaly-backend && npx prisma generate
+      - cd journaly-backend && npx prisma migrate dev
+      - |
+        cd journaly-backend && npx nest start --watch &
+        cd journaly-frontend && npx next dev &
+        wait
+
+  stop:
+    desc: 全てのサービスを停止
+    cmds:
+      - docker-compose down
+      - pkill -f "nest start" || true
+      - pkill -f "next dev" || true
+
+  clean:
+    desc: データベースを含めて全てクリーンアップ
+    cmds:
+      - docker-compose down -v
+      - pkill -f "nest start" || true
+      - pkill -f "next dev" || true
+
+  db:stop:
+    desc: データベースを停止
+    cmds:
+      - docker-compose stop postgres
+
+  db:logs:
+    desc: データベースのログを表示
+    cmds:
+      - docker-compose logs -f postgres
+
+  backend:logs:
+    desc: バックエンドのログを表示（要実装）
+    cmds:
+      - echo "バックエンドは別のターミナルで実行してください"
+
+  install:
+    desc: 全ての依存関係をインストール
+    cmds:
+      - cd journaly-backend && npm install
+      - cd journaly-frontend && npm install
+
+  setup:
+    desc: 初回セットアップ（依存関係インストール + Prisma生成 + マイグレーション）
+    cmds:
+      - task: install
+      - |
+        if [ ! -f journaly-backend/.env ]; then
+          cp journaly-backend/.env.example journaly-backend/.env
+          echo "✓ バックエンドの.envファイルを作成しました"
+        fi
+      - |
+        if [ ! -f journaly-frontend/.env.local ]; then
+          cp journaly-frontend/.env.example journaly-frontend/.env.local
+          echo "✓ フロントエンドの.env.localファイルを作成しました"
+        fi
+      - docker-compose up -d
+      - sleep 3
+      - cd journaly-backend && npx prisma generate
+      - cd journaly-backend && npx prisma migrate dev
+
+  generate:
+    desc: Prismaクライアントを生成
+    dir: journaly-backend
+    cmds:
+      - npx prisma generate
+
+  migrate:
+    desc: データベースマイグレーションを実行
+    dir: journaly-backend
+    cmds:
+      - npx prisma migrate dev
+
+  migrate:deploy:
+    desc: 本番環境用のマイグレーション
+    dir: journaly-backend
+    cmds:
+      - npx prisma migrate deploy
+
+  prisma:studio:
+    desc: Prisma Studioを起動
+    dir: journaly-backend
+    cmds:
+      - npx prisma studio
