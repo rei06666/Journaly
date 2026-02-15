@@ -1,0 +1,44 @@
+extensions:
+  health_check:
+  sigv4auth:
+    region: ${AWS_REGION}
+    service: xray
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+    send_batch_size: 50
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 100
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: ${DEPLOYMENT_ENVIRONMENT}
+        action: upsert
+      - key: service.name
+        value: ${OTEL_SERVICE_NAME}
+        action: upsert
+
+exporters:
+  otlphttp:
+    traces_endpoint: https://xray.ap-northeast-1.amazonaws.com/v1/traces
+    compression: gzip
+    auth:
+      authenticator: sigv4auth
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlphttp]
+  extensions: [health_check, sigv4auth]

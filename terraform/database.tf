@@ -1,29 +1,10 @@
-# Random password for RDS
-resource "random_password" "db_password" {
-  length  = 32
-  special = true
+# Import AWS-managed RDS master user secret
+data "aws_secretsmanager_secret" "rds_master_secret" {
+  arn = module.rds.db_instance_master_user_secret_arn
 }
 
-# Store DB password in AWS Secrets Manager
-resource "aws_secretsmanager_secret" "db_password" {
-  name                    = "${var.project_name}-${var.environment}-db-password"
-  recovery_window_in_days = 7
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-db-password"
-  }
-}
-
-resource "aws_secretsmanager_secret_version" "db_password" {
-  secret_id = aws_secretsmanager_secret.db_password.id
-  secret_string = jsonencode({
-    username = var.db_username
-    password = random_password.db_password.result
-    engine   = "postgres"
-    host     = module.rds.db_instance_address
-    port     = module.rds.db_instance_port
-    dbname   = var.db_name
-  })
+data "aws_secretsmanager_secret_version" "rds_master_secret" {
+  secret_id = data.aws_secretsmanager_secret.rds_master_secret.id
 }
 
 # RDS PostgreSQL Module
@@ -44,7 +25,7 @@ module "rds" {
 
   db_name  = var.db_name
   username = var.db_username
-  password = random_password.db_password.result
+  manage_master_user_password = true
   port     = 5432
 
   multi_az               = var.environment == "prod" ? true : false
@@ -75,4 +56,25 @@ module "rds" {
   tags = {
     Name = "${var.project_name}-${var.environment}-postgres"
   }
+}
+# Create a custom secret with DATABASE_URL for ECS
+locals {
+  rds_secret = jsondecode(data.aws_secretsmanager_secret_version.rds_master_secret.secret_string)
+  database_url = "postgresql://${urlencode(local.rds_secret.username)}:${urlencode(local.rds_secret.password)}@${module.rds.db_instance_address}:5432/${var.db_name}"
+}
+
+resource "aws_secretsmanager_secret" "db_connection" {
+  name                    = "${var.project_name}-${var.environment}-db-connection"
+  recovery_window_in_days = 7
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-db-connection"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "db_connection" {
+  secret_id = aws_secretsmanager_secret.db_connection.id
+  secret_string = jsonencode({
+    database_url = local.database_url
+  })
 }

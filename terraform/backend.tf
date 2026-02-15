@@ -137,7 +137,7 @@ resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
           "secretsmanager:GetSecretValue"
         ]
         Resource = [
-          aws_secretsmanager_secret.db_password.arn
+          aws_secretsmanager_secret.db_connection.arn
         ]
       }
     ]
@@ -269,17 +269,13 @@ resource "aws_ecs_task_definition" "backend" {
         {
           name  = "OTEL_TRACES_SAMPLER"
           value = "always_on"
-        },
-        {
-          name  = "DATABASE_URL"
-          value = "postgresql://${var.db_username}:$${DB_PASSWORD}@${module.rds.db_instance_address}:5432/${var.db_name}"
         }
       ]
 
       secrets = [
         {
-          name      = "DB_PASSWORD"
-          valueFrom = "${aws_secretsmanager_secret.db_password.arn}:password::"
+          name      = "DATABASE_URL"
+          valueFrom = "${aws_secretsmanager_secret.db_connection.arn}:database_url::"
         }
       ]
 
@@ -300,14 +296,38 @@ resource "aws_ecs_task_definition" "backend" {
       ]
     },
     {
-      name  = "adot-collector"
-      image = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+      name      = "adot-collector"
+      image     = "public.ecr.aws/aws-observability/aws-otel-collector:latest"
+      essential = true
 
-      command = ["--config=/etc/ecs/ecs-cloudwatch-xray-applicationinsights.yaml"]
+      command = ["--config=env:ADOT_CONFIG_CONTENT"]
+
+      environment = [
+        {
+          name  = "DEPLOYMENT_ENVIRONMENT"
+          value = var.environment
+        },
+        {
+          name  = "OTEL_SERVICE_NAME"
+          value = "${var.project_name}-backend"
+        },
+        {
+          name  = "AWS_REGION"
+          value = var.aws_region
+        },
+        {
+          name  = "ADOT_CONFIG_CONTENT"
+          value = file("${path.module}/adot-collector-config/adot-config.yaml")
+        }
+      ]
 
       portMappings = [
         {
           containerPort = 4318
+          protocol      = "tcp"
+        },
+        {
+          containerPort = 4317
           protocol      = "tcp"
         },
         {
