@@ -77,8 +77,76 @@ jobs:
         run: |
           CLUSTER_NAME="journaly-${{ github.event.inputs.environment || 'dev' }}-cluster"
           SERVICE_NAME="journaly-${{ github.event.inputs.environment || 'dev' }}-backend-service"
+          TASK_FAMILY="journaly-${{ github.event.inputs.environment || 'dev' }}-backend"
           echo "cluster_name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
           echo "service_name=$SERVICE_NAME" >> $GITHUB_OUTPUT
+          echo "task_family=$TASK_FAMILY" >> $GITHUB_OUTPUT
+
+      - name: Get VPC configuration for migration task
+        id: vpc-config
+        run: |
+          # Get VPC and subnet info from the ECS service
+          SERVICE_INFO=$(aws ecs describe-services \
+            --cluster ${{ steps.ecs-info.outputs.cluster_name }} \
+            --services ${{ steps.ecs-info.outputs.service_name }} \
+            --region ${{ env.AWS_REGION }})
+          
+          SUBNETS=$(echo $SERVICE_INFO | jq -r '.services[0].networkConfiguration.awsvpcConfiguration.subnets | join(",")')
+          SECURITY_GROUPS=$(echo $SERVICE_INFO | jq -r '.services[0].networkConfiguration.awsvpcConfiguration.securityGroups | join(",")')
+          
+          echo "subnets=$SUBNETS" >> $GITHUB_OUTPUT
+          echo "security_groups=$SECURITY_GROUPS" >> $GITHUB_OUTPUT
+
+      - name: Run database migrations
+        run: |
+          echo "Running database migrations..."
+          
+          # Get the latest task definition
+          TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition ${{ steps.ecs-info.outputs.task_family }} \
+            --region ${{ env.AWS_REGION }})
+          
+          # Update the task definition to override the command for migration
+          TASK_DEF_ARN=$(echo $TASK_DEF | jq -r '.taskDefinition.taskDefinitionArn')
+          
+          # Run migration as a one-off task
+          TASK_ARN=$(aws ecs run-task \
+            --cluster ${{ steps.ecs-info.outputs.cluster_name }} \
+            --task-definition ${{ steps.ecs-info.outputs.task_family }} \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[${{ steps.vpc-config.outputs.subnets }}],securityGroups=[${{ steps.vpc-config.outputs.security_groups }}],assignPublicIp=DISABLED}" \
+            --overrides '{
+              "containerOverrides": [
+                {
+                  "name": "backend",
+                  "command": ["sh", "-c", "npx prisma migrate deploy && echo Migration completed"]
+                }
+              ]
+            }' \
+            --region ${{ env.AWS_REGION }} \
+            | jq -r '.tasks[0].taskArn')
+          
+          echo "Migration task ARN: $TASK_ARN"
+          
+          # Wait for migration task to complete
+          aws ecs wait tasks-stopped \
+            --cluster ${{ steps.ecs-info.outputs.cluster_name }} \
+            --tasks $TASK_ARN \
+            --region ${{ env.AWS_REGION }}
+          
+          # Check if migration succeeded
+          TASK_EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster ${{ steps.ecs-info.outputs.cluster_name }} \
+            --tasks $TASK_ARN \
+            --region ${{ env.AWS_REGION }} \
+            | jq -r '.tasks[0].containers[] | select(.name=="backend") | .exitCode')
+          
+          if [ "$TASK_EXIT_CODE" != "0" ]; then
+            echo "❌ Migration failed with exit code: $TASK_EXIT_CODE"
+            exit 1
+          fi
+          
+          echo "✅ Migration completed successfully"
 
       - name: Update ECS service
         run: |
