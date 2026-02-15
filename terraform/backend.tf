@@ -363,6 +363,9 @@ resource "aws_ecs_service" "backend" {
   # Enable ECS Exec for debugging and migrations
   enable_execute_command = true
 
+  # Health check grace period for application startup
+  health_check_grace_period_seconds = 60
+
   network_configuration {
     subnets          = module.vpc.private_subnets
     security_groups  = [aws_security_group.ecs_tasks.id]
