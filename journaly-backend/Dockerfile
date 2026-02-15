@@ -53,6 +53,9 @@ RUN chown -R nestjs:nodejs /app
 # Switch to non-root user
 USER nestjs
 
+# Set working directory
+WORKDIR /app
+
 # Expose port
 EXPOSE 3001
 
@@ -60,8 +63,5 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
   CMD node -e "require('http').get('http://localhost:3001/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Use dumb-init to handle signals properly
-ENTRYPOINT ["dumb-init", "--"]
-
-# Start application
-CMD ["node", "dist/main.js"]
+# Start application (can be overridden for migrations)
+CMD ["dumb-init", "--", "node", "dist/main.js"]
