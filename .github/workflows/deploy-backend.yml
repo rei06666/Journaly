@@ -77,97 +77,8 @@ jobs:
         run: |
           CLUSTER_NAME="journaly-${{ github.event.inputs.environment || 'dev' }}-cluster"
           SERVICE_NAME="journaly-${{ github.event.inputs.environment || 'dev' }}-backend-service"
-          TASK_FAMILY="journaly-${{ github.event.inputs.environment || 'dev' }}-backend"
           echo "cluster_name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
           echo "service_name=$SERVICE_NAME" >> $GITHUB_OUTPUT
-          echo "task_family=$TASK_FAMILY" >> $GITHUB_OUTPUT
-
-      - name: Get VPC configuration for migration task
-        id: vpc-config
-        run: |
-          # Get VPC and subnet info from the ECS service
-          SERVICE_INFO=$(aws ecs describe-services \
-            --cluster ${{ steps.ecs-info.outputs.cluster_name }} \
-            --services ${{ steps.ecs-info.outputs.service_name }} \
-            --region ${{ env.AWS_REGION }})
-          
-          SUBNETS=$(echo $SERVICE_INFO | jq -r '.services[0].networkConfiguration.awsvpcConfiguration.subnets | join(",")')
-          SECURITY_GROUPS=$(echo $SERVICE_INFO | jq -r '.services[0].networkConfiguration.awsvpcConfiguration.securityGroups | join(",")')
-          
-          echo "subnets=$SUBNETS" >> $GITHUB_OUTPUT
-          echo "security_groups=$SECURITY_GROUPS" >> $GITHUB_OUTPUT
-
-      - name: Run database migrations
-        run: |
-          echo "Running database migrations..."
-          
-          # Create override JSON for migration
-          cat > /tmp/overrides.json << 'EOF'
-          {
-            "containerOverrides": [
-              {
-                "name": "backend",
-                "command": ["npx", "prisma", "migrate", "deploy"]
-              },
-              {
-                "name": "adot-collector",
-                "command": ["sh", "-c", "echo ADOT disabled for migration && sleep 300"]
-              }
-            ]
-          }
-          EOF
-          
-          echo "Override configuration:"
-          cat /tmp/overrides.json
-          
-          # Run migration as a one-off task
-          TASK_ARN=$(aws ecs run-task \
-            --cluster ${{ steps.ecs-info.outputs.cluster_name }} \
-            --task-definition ${{ steps.ecs-info.outputs.task_family }} \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[${{ steps.vpc-config.outputs.subnets }}],securityGroups=[${{ steps.vpc-config.outputs.security_groups }}],assignPublicIp=DISABLED}" \
-            --overrides file:///tmp/overrides.json \
-            --region ${{ env.AWS_REGION }} \
-            | jq -r '.tasks[0].taskArn')
-          
-          echo "Migration task ARN: $TASK_ARN"
-          
-          # Wait for migration task to complete (with timeout)
-          echo "Waiting for migration to complete..."
-          aws ecs wait tasks-stopped \
-            --cluster ${{ steps.ecs-info.outputs.cluster_name }} \
-            --tasks $TASK_ARN \
-            --region ${{ env.AWS_REGION }} \
-            --cli-read-timeout 600 \
-            || true
-          
-          # Check if migration succeeded
-          TASK_STATUS=$(aws ecs describe-tasks \
-            --cluster ${{ steps.ecs-info.outputs.cluster_name }} \
-            --tasks $TASK_ARN \
-            --region ${{ env.AWS_REGION }})
-          
-          TASK_EXIT_CODE=$(echo $TASK_STATUS | jq -r '.tasks[0].containers[] | select(.name=="backend") | .exitCode // "null"')
-          STOP_REASON=$(echo $TASK_STATUS | jq -r '.tasks[0].stoppedReason // "unknown"')
-          
-          echo "Exit code: $TASK_EXIT_CODE"
-          echo "Stop reason: $STOP_REASON"
-          
-          # Get migration logs
-          echo "=== Migration logs ==="
-          aws logs tail /ecs/${{ vars.PROJECT_NAME || 'journaly' }}-${{ github.event.inputs.environment || 'dev' }}/backend \
-            --since 5m \
-            --format short \
-            --region ${{ env.AWS_REGION }} \
-            || echo "Could not fetch logs"
-          
-          if [ "$TASK_EXIT_CODE" != "0" ] && [ "$TASK_EXIT_CODE" != "null" ]; then
-            echo "❌ Migration failed with exit code: $TASK_EXIT_CODE"
-            echo "Stop reason: $STOP_REASON"
-            exit 1
-          fi
-          
-          echo "✅ Migration completed successfully"
 
       - name: Update ECS service
         run: |
@@ -221,6 +132,11 @@ jobs:
           \`\`\`bash
           aws logs tail /ecs/journaly-${{ github.event.inputs.environment || 'dev' }}/backend --follow
           \`\`\`
+
+          ### ℹ️ Notes
+
+          - Database migrations are automatically executed on container startup
+          - Check logs for migration status if the service fails to start
 
           **Deployed by:** @${{ github.actor }}
           **Commit:** ${{ github.sha }}
