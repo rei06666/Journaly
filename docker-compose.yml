@@ -11,5 +11,16 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: journaly-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4318:4318"    # OTLP HTTP
+      - "14250:14250"  # gRPC
+    restart: unless-stopped
+
 volumes:
   postgres_data:

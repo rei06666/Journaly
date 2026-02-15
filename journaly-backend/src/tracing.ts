@@ -7,6 +7,7 @@ import {
   ATTR_SERVICE_VERSION,
   SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
 } from '@opentelemetry/semantic-conventions';
+import type { IncomingMessage } from 'http';
 
 // 環境変数から設定を取得
 const serviceName = process.env.OTEL_SERVICE_NAME || 'journaly-backend';
@@ -36,10 +37,33 @@ const sdk = new NodeSDK({
       // HTTPサーバーとクライアントの自動計測
       '@opentelemetry/instrumentation-http': {
         enabled: true,
+        // ヘルスチェックパスを除外
+        ignoreIncomingRequestHook: (request: IncomingMessage) => {
+          const url = request.url || '';
+          return url.includes('/health');
+        },
+        requestHook: (span, request) => {
+          // HTTPメソッドとパスをspan名に含める
+          const method = request.method || 'HTTP';
+          const req = request as IncomingMessage;
+          const path = req.url || '';
+          span.updateName(`${method} ${path}`);
+        },
       },
       // Expressの自動計測
       '@opentelemetry/instrumentation-express': {
         enabled: true,
+        requestHook: (span, requestInfo) => {
+          // Expressのルート情報を追加
+          if (
+            String(requestInfo.layerType) === 'request_handler' &&
+            requestInfo.route
+          ) {
+            const request = requestInfo.request as IncomingMessage;
+            const method = request.method || 'HTTP';
+            span.updateName(`${method} ${requestInfo.route}`);
+          }
+        },
       },
     }),
   ],
