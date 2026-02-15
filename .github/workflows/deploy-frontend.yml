@@ -1,0 +1,172 @@
+name: Deploy Frontend to S3 + CloudFront
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+  push:
+    branches:
+      - main
+    paths:
+      - 'journaly-frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+  NODE_VERSION: '20'
+
+jobs:
+  deploy:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: journaly-frontend/package-lock.json
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get backend API URL
+        id: backend-info
+        run: |
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --query "LoadBalancers[?contains(LoadBalancerName, 'journaly-${{ github.event.inputs.environment || 'dev' }}')].DNSName" \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          
+          API_URL="http://${ALB_DNS}"
+          echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+          echo "Using API URL: $API_URL"
+
+      - name: Install dependencies
+        working-directory: journaly-frontend
+        run: npm ci
+
+      - name: Build Next.js application
+        working-directory: journaly-frontend
+        env:
+          NEXT_PUBLIC_API_URL: ${{ steps.backend-info.outputs.api_url }}
+        run: npm run build
+
+      - name: Get S3 bucket and CloudFront distribution
+        id: aws-resources
+        run: |
+          S3_BUCKET="journaly-${{ github.event.inputs.environment || 'dev' }}-frontend"
+          
+          CF_DISTRIBUTION_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Origins.Items[?contains(DomainName, '${S3_BUCKET}')]].Id" \
+            --output text \
+            --region ${{ env.AWS_REGION }})
+          
+          echo "s3_bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
+          echo "cf_distribution_id=$CF_DISTRIBUTION_ID" >> $GITHUB_OUTPUT
+
+      - name: Upload static files to S3
+        working-directory: journaly-frontend
+        run: |
+          # Upload all files except HTML/JSON with long cache
+          aws s3 sync out/ s3://${{ steps.aws-resources.outputs.s3_bucket }} \
+            --delete \
+            --region ${{ env.AWS_REGION }} \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "*.html" \
+            --exclude "*.json"
+          
+          # Upload HTML and JSON files with short cache
+          aws s3 sync out/ s3://${{ steps.aws-resources.outputs.s3_bucket }} \
+            --region ${{ env.AWS_REGION }} \
+            --cache-control "public, max-age=0, must-revalidate" \
+            --exclude "*" \
+            --include "*.html" \
+            --include "*.json"
+
+      - name: Invalidate CloudFront cache
+        id: invalidate
+        run: |
+          INVALIDATION_ID=$(aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.aws-resources.outputs.cf_distribution_id }} \
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text)
+          
+          echo "invalidation_id=$INVALIDATION_ID" >> $GITHUB_OUTPUT
+          echo "CloudFront invalidation created: $INVALIDATION_ID"
+
+      - name: Wait for CloudFront invalidation
+        run: |
+          echo "Waiting for CloudFront invalidation to complete..."
+          aws cloudfront wait invalidation-completed \
+            --distribution-id ${{ steps.aws-resources.outputs.cf_distribution_id }} \
+            --id ${{ steps.invalidate.outputs.invalidation_id }}
+          echo "✅ CloudFront cache invalidated!"
+
+      - name: Get CloudFront URL
+        id: cloudfront-info
+        run: |
+          CF_URL=$(aws cloudfront get-distribution \
+            --id ${{ steps.aws-resources.outputs.cf_distribution_id }} \
+            --query 'Distribution.DomainName' \
+            --output text)
+          echo "cf_url=$CF_URL" >> $GITHUB_OUTPUT
+
+      - name: Test deployment
+        run: |
+          echo "Testing CloudFront endpoint..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://${{ steps.cloudfront-info.outputs.cf_url }})
+          
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "✅ Frontend is accessible!"
+          else
+            echo "❌ Frontend returned status code: $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: Create deployment summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## 🚀 Frontend Deployment Successful
+
+          **Environment:** \`${{ github.event.inputs.environment || 'dev' }}\`
+          **S3 Bucket:** \`${{ steps.aws-resources.outputs.s3_bucket }}\`
+          **CloudFront Distribution:** \`${{ steps.aws-resources.outputs.cf_distribution_id }}\`
+
+          ### 🔗 URLs
+
+          - **Frontend URL:** https://${{ steps.cloudfront-info.outputs.cf_url }}
+          - **API URL:** ${{ steps.backend-info.outputs.api_url }}
+
+          ### ⚙️ Build Info
+
+          - **Node.js Version:** ${{ env.NODE_VERSION }}
+          - **Next.js Build:** Static Export
+          - **Cache Invalidation:** ${{ steps.invalidate.outputs.invalidation_id }}
+
+          ### 📝 Notes
+
+          Changes may take a few minutes to propagate globally through CloudFront.
+
+          **Deployed by:** @${{ github.actor }}
+          **Commit:** ${{ github.sha }}
+          EOF

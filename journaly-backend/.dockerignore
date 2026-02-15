@@ -1,0 +1,55 @@
+# Ignore node_modules
+node_modules/
+
+# Ignore npm logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Ignore build output
+dist/
+build/
+
+# Ignore test coverage
+coverage/
+
+# Ignore environment variables
+.env
+.env.local
+.env.*.local
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore documentation
+README.md
+*.md
+
+# Ignore test files
+test/
+*.spec.ts
+*.test.ts
+
+# Ignore TypeScript config (not needed in Docker)
+tsconfig.json
+tsconfig.build.json
+
+# Ignore ESLint config
+.eslintrc.js
+eslint.config.mjs
+.prettierrc
+
+# Ignore Prisma migrations during build (run separately)
+prisma/migrations/

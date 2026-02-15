@@ -198,3 +198,58 @@ task generate
 - バックエンドのAPIは `http://localhost:3000/api` でアクセス可能
 - データベースの内容を確認するには `task prisma:studio` を実行
 - マイグレーションファイルは `journaly-backend/prisma/migrations/` に保存されます
+
+## AWS へのデプロイ
+
+JournalyをAWS上にデプロイするためのTerraformコードとGitHub Actionsワークフローが用意されています。
+
+### アーキテクチャ
+
+- **バックエンド**: ECS Fargate (ADOT Collectorサイドカー付き)
+- **フロントエンド**: S3 + CloudFront (静的ホスティング)
+- **データベース**: RDS PostgreSQL
+- **監視**: CloudWatch + Application Signals
+
+### デプロイ方法
+
+#### GitHub Actions（推奨）
+
+GitHub ActionsでCI/CDパイプラインを自動化できます。
+
+**事前準備:**
+1. AWS IAMロール（OIDC認証）を作成
+2. GitHub Secretsに `AWS_ROLE_ARN` を設定
+3. Terraformバックエンドを設定（S3 + DynamoDB）
+
+**デプロイ手順:**
+1. GitHubの **Actions** タブから手動実行、または
+2. コードをpushして自動デプロイ
+
+詳細は [.github/workflows/README.md](.github/workflows/README.md) を参照してください。
+
+#### 手動デプロイ
+
+ローカル環境から直接デプロイすることも可能です。
+
+```bash
+# 1. Terraformでインフラをデプロイ
+cd terraform
+terraform init
+terraform apply
+
+# 2. バックエンドをデプロイ
+cd ../journaly-backend
+./deploy.sh
+
+# 3. フロントエンドをデプロイ
+cd ../journaly-frontend
+./deploy.sh
+```
+
+詳細は [terraform/README.md](terraform/README.md) を参照してください。
+
+### コスト見積もり
+
+月額約$90-145（東京リージョン、開発環境設定）
+
+詳細は [terraform/README.md](terraform/README.md) の「コスト見積もり」セクションを参照してください。
