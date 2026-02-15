@@ -75,20 +75,20 @@ jobs:
         id: plan
         if: github.event.inputs.action == 'plan' || github.event.inputs.action == '' || github.event_name == 'push'
         run: |
-          terraform plan -no-color -var-file=terraform.tfvars -var="environment=${{ github.event.inputs.environment || 'dev' }}"
+          terraform plan -no-color -var="environment=${{ github.event.inputs.environment || 'dev' }}"
         continue-on-error: true
 
       - name: Terraform Apply
         id: apply
         if: github.event.inputs.action == 'apply'
         run: |
-          terraform apply -auto-approve -var-file=terraform.tfvars -var="environment=${{ github.event.inputs.environment || 'dev' }}"
+          terraform apply -auto-approve -var="environment=${{ github.event.inputs.environment || 'dev' }}"
 
       - name: Terraform Destroy
         id: destroy
         if: github.event.inputs.action == 'destroy'
         run: |
-          terraform destroy -auto-approve -var-file=terraform.tfvars -var="environment=${{ github.event.inputs.environment || 'dev' }}"
+          terraform destroy -auto-approve -var="environment=${{ github.event.inputs.environment || 'dev' }}"
 
       - name: Terraform Output
         if: github.event.inputs.action == 'apply'
