@@ -99,16 +99,14 @@ jobs:
       - name: Get deployment info
         id: deployment-info
         run: |
-          ALB_DNS=$(aws elbv2 describe-load-balancers \
-            --query "LoadBalancers[?contains(LoadBalancerName, 'journaly-${{ github.event.inputs.environment || 'dev' }}')].DNSName" \
-            --output text \
-            --region ${{ env.AWS_REGION }})
-          echo "alb_dns=$ALB_DNS" >> $GITHUB_OUTPUT
+          # Use custom domain for API
+          API_DOMAIN="api.naruse-verify-dev.com"
+          echo "api_domain=$API_DOMAIN" >> $GITHUB_OUTPUT
 
       - name: Health check
         run: |
           echo "Testing health endpoint..."
-          curl -f http://${{ steps.deployment-info.outputs.alb_dns }}/health || exit 1
+          curl -f https://${{ steps.deployment-info.outputs.api_domain }}/health || exit 1
           echo "✅ Health check passed!"
 
       - name: Create deployment summary
@@ -123,8 +121,8 @@ jobs:
 
           ### 🔗 Endpoints
 
-          - **API URL:** http://${{ steps.deployment-info.outputs.alb_dns }}
-          - **Health Check:** http://${{ steps.deployment-info.outputs.alb_dns }}/health
+          - **API URL:** https://${{ steps.deployment-info.outputs.api_domain }}
+          - **Health Check:** https://${{ steps.deployment-info.outputs.api_domain }}/health
 
           ### 📊 Logs
 

@@ -15,6 +15,12 @@ module "alb" {
       ip_protocol = "tcp"
       cidr_ipv4   = "0.0.0.0/0"
     }
+    all_https = {
+      from_port   = 443
+      to_port     = 443
+      ip_protocol = "tcp"
+      cidr_ipv4   = "0.0.0.0/0"
+    }
   }
   security_group_egress_rules = {
     all = {
@@ -27,6 +33,18 @@ module "alb" {
     http = {
       port     = 80
       protocol = "HTTP"
+
+      redirect = {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
+
+    https = {
+      port            = 443
+      protocol        = "HTTPS"
+      certificate_arn = aws_acm_certificate.alb.arn
 
       forward = {
         target_group_key = "backend"
@@ -57,6 +75,8 @@ module "alb" {
       create_attachment = false
     }
   }
+
+  depends_on = [aws_acm_certificate_validation.alb]
 
   tags = {
     Name = "${var.project_name}-${var.environment}-alb"

@@ -51,12 +51,8 @@ jobs:
       - name: Get backend API URL
         id: backend-info
         run: |
-          ALB_DNS=$(aws elbv2 describe-load-balancers \
-            --query "LoadBalancers[?contains(LoadBalancerName, 'journaly-${{ github.event.inputs.environment || 'dev' }}')].DNSName" \
-            --output text \
-            --region ${{ env.AWS_REGION }})
-          
-          API_URL="http://${ALB_DNS}"
+          # Use custom domain for API
+          API_URL="https://api.naruse-verify-dev.com"
           echo "api_url=$API_URL" >> $GITHUB_OUTPUT
           echo "Using API URL: $API_URL"
 
@@ -125,10 +121,8 @@ jobs:
       - name: Get CloudFront URL
         id: cloudfront-info
         run: |
-          CF_URL=$(aws cloudfront get-distribution \
-            --id ${{ steps.aws-resources.outputs.cf_distribution_id }} \
-            --query 'Distribution.DomainName' \
-            --output text)
+          # Use custom domain for frontend
+          CF_URL="naruse-verify-dev.com"
           echo "cf_url=$CF_URL" >> $GITHUB_OUTPUT
 
       - name: Test deployment

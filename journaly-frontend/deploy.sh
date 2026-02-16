@@ -28,18 +28,18 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
-# Get ALB DNS name from Terraform output
+# Get backend API URL from Terraform output
 echo -e "${YELLOW}Getting backend API URL from Terraform...${NC}"
 cd ../terraform
-ALB_DNS=$(terraform output -raw alb_dns_name 2>/dev/null || echo "")
+BACKEND_API_URL=$(terraform output -raw backend_api_url 2>/dev/null || echo "")
 CLOUDFRONT_ID=$(terraform output -raw cloudfront_distribution_id 2>/dev/null || echo "")
 cd ../journaly-frontend
 
-if [ -z "$ALB_DNS" ]; then
-    echo -e "${RED}Warning: Could not get ALB DNS from Terraform. Using default.${NC}"
+if [ -z "$BACKEND_API_URL" ]; then
+    echo -e "${RED}Warning: Could not get backend API URL from Terraform. Using default.${NC}"
     NEXT_PUBLIC_API_URL="http://localhost:3001"
 else
-    NEXT_PUBLIC_API_URL="http://${ALB_DNS}"
+    NEXT_PUBLIC_API_URL="${BACKEND_API_URL}"
 fi
 
 echo -e "${GREEN}API URL: ${NEXT_PUBLIC_API_URL}${NC}"

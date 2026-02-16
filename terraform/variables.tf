@@ -87,6 +87,12 @@ variable "frontend_domain_name" {
   default     = ""
 }
 
+variable "domain_name" {
+  description = "Primary domain name for the application"
+  type        = string
+  default     = "naruse-verify-dev.com"
+}
+
 # Monitoring Variables
 variable "enable_application_signals" {
   description = "Enable AWS Application Signals"
