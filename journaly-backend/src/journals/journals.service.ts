@@ -27,7 +27,7 @@ export class JournalsService {
 
   async remove(id: string, userId: string) {
     return await this.prisma.journal.deleteMany({
-      where: { id, userId },
+      where: { id: userId, userId: id },
     });
   }
 }
