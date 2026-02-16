@@ -77,7 +77,7 @@ variable "backend_desired_count" {
 variable "backend_container_port" {
   description = "Backend container port"
   type        = number
-  default     = 3001
+  default     = 3002
 }
 
 # Frontend Variables
