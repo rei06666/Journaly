@@ -58,3 +58,18 @@ output "github_actions_role_arn" {
   description = "IAM Role ARN for GitHub Actions"
   value       = aws_iam_role.github_actions.arn
 }
+
+output "frontend_url" {
+  description = "Frontend URL"
+  value       = "https://${var.domain_name}"
+}
+
+output "backend_api_url" {
+  description = "Backend API URL"
+  value       = "https://api.${var.domain_name}"
+}
+
+output "nameservers" {
+  description = "Route53 nameservers for domain configuration"
+  value       = aws_route53_zone.main.name_servers
+}

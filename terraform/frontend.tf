@@ -53,6 +53,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   comment             = "${var.project_name} ${var.environment} frontend"
   default_root_object = "index.html"
   price_class         = "PriceClass_200"
+  aliases             = [var.domain_name]
 
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
@@ -121,12 +122,12 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = true
-    # If you have a custom domain and certificate:
-    # acm_certificate_arn      = var.acm_certificate_arn
-    # ssl_support_method       = "sni-only"
-    # minimum_protocol_version = "TLSv1.2_2021"
+    acm_certificate_arn      = aws_acm_certificate.cloudfront.arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
   }
+
+  depends_on = [aws_acm_certificate_validation.cloudfront]
 
   tags = {
     Name = "${var.project_name}-${var.environment}-frontend-cdn"
