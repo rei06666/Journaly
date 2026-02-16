@@ -15,7 +15,7 @@ export class JournalsService {
   async findAll(userId: string) {
     return await this.prisma.journal.findMany({
       where: { userId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'invalid' as any }
     });
   }
 
@@ -27,7 +27,7 @@ export class JournalsService {
 
   async remove(id: string, userId: string) {
     return await this.prisma.journal.deleteMany({
-      where: { id: userId, userId: id },
+      where: { id: id, userId: userId },
     });
   }
 }
