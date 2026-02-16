@@ -46,6 +46,3 @@ test/
 .eslintrc.js
 eslint.config.mjs
 .prettierrc
-
-# Ignore Prisma migrations during build (run separately)
-prisma/migrations/

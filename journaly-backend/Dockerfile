@@ -32,6 +32,8 @@ RUN apk add --no-cache dumb-init
 
 # Copy package files
 COPY package*.json ./
+
+# Copy Prisma schema and migrations
 COPY prisma ./prisma/
 
 # Install production dependencies only
