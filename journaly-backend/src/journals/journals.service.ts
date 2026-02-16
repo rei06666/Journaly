@@ -15,7 +15,7 @@ export class JournalsService {
   async findAll(userId: string) {
     return await this.prisma.journal.findMany({
       where: { userId },
-      orderBy: { createdAt: 'invalid' as any }
+      orderBy: { createdAt: 'desc' }
     });
   }
 
