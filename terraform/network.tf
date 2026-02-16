@@ -48,8 +48,8 @@ resource "aws_security_group" "ecs_tasks" {
 
   ingress {
     description     = "Allow traffic from ALB"
-    from_port       = var.backend_container_port
-    to_port         = var.backend_container_port
+    from_port       = 3002
+    to_port         = 3002
     protocol        = "tcp"
     security_groups = [module.alb.security_group_id]
   }
